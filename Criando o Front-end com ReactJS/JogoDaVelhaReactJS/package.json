@@ -1,0 +1,12 @@
+{
+  "name": "blog-npx",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "fala": "cowsay"
+  },
+  "dependencies": {
+    "cowsay": "^1.4.0"
+  }
+}
