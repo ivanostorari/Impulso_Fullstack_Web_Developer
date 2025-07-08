@@ -1,0 +1,107 @@
+import * as Api from 'api/authApi'
+import jwtDecode from 'jwt-decode'
+import eventEmitter from 'services/event/EventEmitter'
+import { client } from 'services/http/client'
+
+const ACCESS_TOKEN = 'jwt_access_token'
+const HTTP_HEADER_AUTHORIZATION = 'Authorization'
+
+export const JwtServiceEvents = {
+  UserLoggedInAutoEvent: 'UserLoggedInAutoEvent',
+  UserLoggedOutAutoEvent: 'UserLoggedOutAutoEvent',
+  NoAccessTokenEvent: 'NoAccessTokenEvent'
+}
+
+class JwtService {
+  init() {
+    this.handleAuthentication()
+  }
+
+  login = (email, password) => {
+    return new Promise((resolve, reject) => {
+      Api.authLogin({ email, password })
+        .then(response => {
+          this._setSession(response.data.token)
+          resolve(response.data)
+        })
+        .catch(error => {
+          reject(error)
+        })
+    })
+  }
+
+  loginWithToken = () => {
+    return new Promise((resolve, reject) => {
+      Api.authLoginWithToken(this._getAccessToken())
+        .then(response => {
+          this._setSession(response.data.token)
+          resolve(response.data)
+        })
+        .catch(error => {
+          this._resetSession()
+          reject(error)
+        })
+    })
+  }
+
+  logout = () => {
+    this._resetSession()
+  }
+
+  handleAuthentication = () => {
+    const accessToken = this._getAccessToken()
+
+    if (!accessToken) {
+      eventEmitter.emit(JwtServiceEvents.NoAccessTokenEvent)
+      return
+    }
+
+    if (this._isValidAccessToken(accessToken)) {
+      this._setSession(accessToken)
+      eventEmitter.emit(JwtServiceEvents.UserLoggedInAutoEvent)
+      return
+    }
+
+    this._resetSession()
+    eventEmitter.emit(JwtServiceEvents.UserLoggedOutAutoEvent, 'accessToken expired')
+  }
+
+  _setSession = accessToken => {
+    if (accessToken) {
+      localStorage.setItem(ACCESS_TOKEN, accessToken)
+      client.addDefaultHeader(HTTP_HEADER_AUTHORIZATION, `Bearer ${accessToken}`)
+      return
+    }
+
+    localStorage.removeItem(ACCESS_TOKEN)
+    client.removeDefaultHeader(HTTP_HEADER_AUTHORIZATION)
+  }
+
+  _resetSession = () => {
+    this._setSession(null)
+  }
+
+  _getAccessToken = () => {
+    return window.localStorage.getItem(ACCESS_TOKEN)
+  }
+
+  _isValidAccessToken = accessToken => {
+    if (!accessToken) {
+      return false
+    }
+
+    const decoded = jwtDecode(accessToken)
+    const currentTime = Date.now() / 1000
+
+    if (decoded.exp < currentTime) {
+      console.warn('access token expired')
+      return false
+    }
+
+    return true
+  }
+}
+
+const instance = new JwtService()
+
+export default instance
